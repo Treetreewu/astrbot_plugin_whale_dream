@@ -1,0 +1,62 @@
+--- a/src/A_memorix/host_service.py
++++ b/src/A_memorix/host_service.py
+@@ -386,6 +386,8 @@
+                 self._startup_finished_at = time.time()
+                 set_runtime_kernel(kernel)
+             await self._replay_startup_write_queue(kernel)
++            from whale_dream.maibot import install as install_dream
++            install_dream(kernel)
+             async with self._lock:
+                 if self._kernel is kernel and self._runtime_state == "ready":
+                     self._startup_finished_at = time.time()
+@@ -1021,6 +1023,8 @@
+         }
+ 
+     async def _shutdown_locked(self) -> None:
++        from whale_dream.maibot import shutdown as shutdown_dream
++        await shutdown_dream()
+         task = self._startup_task
+         if task is not None and not task.done():
+             task.cancel()
+--- a/src/common/utils/utils_message.py
++++ b/src/common/utils/utils_message.py
+@@ -230,6 +230,8 @@
+         本体里持有，本方法仅做 `to_thread` 透传。
+         """
+         await asyncio.to_thread(MessageUtils.store_message_to_db, message)
++        from whale_dream.maibot import observe as observe_dream
++        observe_dream(message)
+ 
+     @staticmethod
+     def fill_reply_frequency_if_available(message: "SessionMessage") -> None:
+--- a/src/maisaka/chat_loop_service.py
++++ b/src/maisaka/chat_loop_service.py
+@@ -818,12 +818,14 @@
+     def build_prompt_template_context(self, tools_section: str = "", bot_nickname_notice: str = "") -> dict[str, str]:
+         """构造 Maisaka prompt 模板的公共渲染参数。"""
+ 
++        from whale_dream.maibot import inject as inject_dream
++
+         return {
+             "bot_name": global_config.bot.nickname,
+             "bot_alias_notice": self._build_bot_alias_notice(),
+             # 昵称说明另起一行跟在名字、人格特征和行为风格之后；没有需要说明的昵称时不占行
+             "bot_nickname_notice": f"\n{bot_nickname_notice}" if bot_nickname_notice else "",
+-            "personality": global_config.personality.personality.strip(),
++            "personality": global_config.personality.personality.strip() + inject_dream(self._session_id),
+             "behavior_style": self.behavior_style_prompt,
+             "file_tools_section": tools_section,
+             "group_chat_attention_block": self._build_group_chat_attention_block(),
+--- a/src/A_memorix/core/storage/metadata_store.py
++++ b/src/A_memorix/core/storage/metadata_store.py
+@@ -205,5 +205,10 @@
+         content_normalized = normalize_text(content)
+         hash_value = compute_hash(content_normalized)
++        # Dream projections have independent scope/version lifecycles even
++        # when their readable text is identical. Do not merge their tombstones.
++        if (metadata or {}).get("whale_dream_record"):
++            hash_value = compute_hash(json.dumps([source, metadata["external_id"],
++                                                 content_normalized], ensure_ascii=False))
+         resolved_knowledge_type = validate_stored_knowledge_type(knowledge_type)
+ 
+         now = datetime.now().timestamp()

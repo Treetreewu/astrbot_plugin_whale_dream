@@ -1,0 +1,7 @@
+name: astrbot_plugin_whale_dream
+display_name: Whale Dream
+desc: 空闲记忆整理与有证据的长期成长（固定 LivingMemory 兼容桥）
+version: 0.1.0
+author: Treetreewu
+repo: https://github.com/Treetreewu/astrbot_plugin_whale_dream
+astrbot_version: '>=4.29.3,<4.30.0'

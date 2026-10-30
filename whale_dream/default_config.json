@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "bots": {"maibot": true, "astrbot": true},
+  "scan_seconds": 300,
+  "idle_seconds": 1200,
+  "round_gap_seconds": 21600,
+  "rounds_per_day": 2,
+  "sessions_per_round": 5,
+  "history_days": 7,
+  "messages_per_session": 120,
+  "memories_per_session": 150,
+  "input_chars": 40000,
+  "timeout_seconds": 120,
+  "episodes_per_session": 3,
+  "traits_per_session": 2,
+  "promotion_interactions": 3,
+  "promotion_days": 2,
+  "promotions_per_day": 1,
+  "active_traits": 20,
+  "injected_traits": 2,
+  "mood_half_life_seconds": 21600
+}

@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/gongzhudeng/astrbot_plugin_livingmemory",
+  "commit": "c486ed65c7d072344c698f83359098c1d4293c8d",
+  "version": "2.7.0-gd.12",
+  "patch": "compatibility/patches/dream-livingmemory.patch",
+  "files": {
+    "main.py": "0cd67eac21bd5ff905a69be87418dcbc817920057ea07eed702e725a23d10985",
+    "core/managers/consolidation_manager.py": "024727eb57c21b483b63bc19a9f7d1a7165bbe2d542d17c180ec63cdfac45470",
+    "core/managers/memory_engine.py": "5cf8c67d3b6eb98d6f58353e872d07907220e25324aa808c397a09ae6dd60966",
+    "core/managers/conversation_manager.py": "72e956bf1aa3ac22aee3169cb5f2c0a5255d4ffd5897941bc803041a80b0ab80",
+    "core/utils/__init__.py": "db74e6ceb0bf6b7315dad71aac45fcc3d4a8dfe7074fcd073c06a2f55da77931",
+    "metadata.yaml": "5f2936c619e744be49f3e69e9e63f458f51391d25fed76a9085c01e0a1e3fd78"
+  }
+}

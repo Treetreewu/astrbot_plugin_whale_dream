@@ -1,0 +1,17 @@
+--- a/core/managers/consolidation_manager.py
++++ b/core/managers/consolidation_manager.py
+@@ -158,12 +158,12 @@
+     def _group_by_session(
+         self, candidates: list[dict[str, Any]]
+     ) -> list[list[dict[str, Any]]]:
+-        grouped: dict[str, list[dict[str, Any]]] = {}
++        grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+         for mem in candidates:
+             session_id = mem["metadata"].get("session_id")
+             if not session_id:
+                 continue
+-            grouped.setdefault(str(session_id), []).append(mem)
++            grouped.setdefault((str(session_id), str(mem["metadata"].get("persona_id") or "")), []).append(mem)
+         return list(grouped.values())
+ 
+     async def _group_semantic(

@@ -1,0 +1,30 @@
+Whale Dream
+Copyright (C) 2026 Treetreewu and contributors.
+
+This repository is distributed under the GNU Affero General Public License,
+version 3 or (at your option) any later version. See LICENSE.
+
+The Dream implementation was extracted from the whale-qqbot project, snapshot
+b02c7c5, including the thread-safe journal fix from 9585fc1. This repository has
+its own initial history and contains no deployment secrets or runtime journal.
+
+Compatibility patches include context from their respective upstream projects:
+
+- compatibility/patches/dream-livingmemory.patch:
+  gongzhudeng/astrbot_plugin_livingmemory, commit
+  c486ed65c7d072344c698f83359098c1d4293c8d (2.7.0-gd.12), AGPL-3.0.
+  Its upstream credits identify lxfight's LivingMemory v2.3.6 as its base.
+  https://github.com/gongzhudeng/astrbot_plugin_livingmemory
+  https://github.com/lxfight-s-Astrbot-Plugins/astrbot_plugin_livingmemory
+
+- compatibility/patches/dream-maibot.patch:
+  Mai-with-u/MaiBot, commit 2a9af62cec37035d29237acbe2cf3adceb700b27,
+  GPL-3.0. The upstream license is preserved in LICENSES/GPL-3.0.txt.
+  https://github.com/Mai-with-u/MaiBot
+  The upstream context in this patch retains its original license.
+
+AstrBot (AGPL-3.0) and LivingMemory are external runtime dependencies.
+Their full source is not vendored here. Preserve upstream notices and licenses
+when building or distributing patched upstream artifacts. The build helper
+reconstructs changed files from the pinned Git objects; it does not replace
+the complete upstream corresponding source or license files.
