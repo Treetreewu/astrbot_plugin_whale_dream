@@ -45,6 +45,12 @@
 
 ## 配置与数据
 
+0.1.1 修复原生清理与做梦写入的锁顺序冲突：兼容桥直接复用 LivingMemory 的可重入 SQLite 锁，源码预检包含 `storage/sqlite_utils.py`。机器人上下文挤满输入窗口时仍会推进到待处理的真人消息；过长文本按序列化预算保留真实前缀，不改原始 journal。
+
+证据身份不再把“缺少 is_bot”解释为真人。只有平台提供明确的布尔 `bot=false` / `is_bot=false`，或操作者按稳定 ID 确认身份，才作为真人证据；明确机器人标记和本机出站消息始终排除。未识别身份的消息仍可进入上下文，但不能证明成员事实或晋升成长。没有可靠身份标记的平台需要下列私有映射；不会按昵称猜测，也不会自动重判历史记录。
+
+可在 journal 同目录放置可选 `sender-roles.json`，重载插件后生效。文件格式是精确的宿主会话 ID → 宿主发送者 ID → `human`/`bot`，例如 `{"qq:GroupMessage:example": {"verified-user-id": "human", "verified-bot-id": "bot"}}`。两个框架分别维护自己的文件；QQ OpenID 可能因应用不同而不同，不能把 appid 或另一框架的 ID 直接当成发送者 ID。不要提交真实 ID。也可在私有 `WHALE_DREAM_CONFIG` 中使用 `sender_roles: {"astrbot": {会话: {成员: 身份}}, "maibot": {...}}`。
+
 默认配置是 [`whale_dream/default_config.json`](whale_dream/default_config.json)。可用环境变量 `WHALE_DREAM_CONFIG` 指向私有 JSON 文件；显式指定的文件不存在或格式错误时会报错，不会静默回退。共享配置中的 `bots.maibot` 仅用于可选 MaiBot 接入，加载 AstrBot 插件不会启动 MaiBot。
 
 AstrBot journal 仍使用 `StarTools.get_data_dir("astrbot_plugin_livingmemory")/whale-dream/state.sqlite3`，因此从原接入迁移时可保留证据、额度、投影 ID 和成长版本。这个兼容路径是有意保留的，卸载做梦插件不会删除数据。原生模型和 embedding 调用可能产生费用。
@@ -73,6 +79,7 @@ python -m unittest discover -s tests -v
 
 ```bash
 python scripts/check-dream-plugin-api.py --source-root /path/to/upstream
+python scripts/check-native-lock.py --source-root /path/to/upstream
 python scripts/prepare-compatibility.py --source-root /path/to/upstream
 ```
 

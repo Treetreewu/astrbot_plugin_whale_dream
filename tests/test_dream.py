@@ -294,6 +294,27 @@ class DreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(json.dumps(self.adapter.payload, ensure_ascii=False)), self.cfg["input_chars"])
         self.assertEqual(len(self.store.read()["rounds"]), 1)
 
+    async def test_bot_only_prefix_cannot_starve_later_human_evidence(self):
+        for i in range(125):
+            self.observe(f"bot-{i}", "机器人上下文" * 2000, human=False)
+        sid = self.observe("human", "我现在喜欢乌龙茶")
+        result = await self.run_changes([self.change(sid)])
+        self.assertEqual(result["results"], ["committed"])
+        self.assertIn(sid, {m["id"] for m in self.adapter.payload["messages"]})
+        self.assertIn("乌龙茶", self.dream.recall("A", "P", "乌龙茶", "u1"))
+        self.assertFalse(self.dream.due())
+
+    async def test_escaped_long_message_is_bounded_without_blocking_next_message(self):
+        self.observe("large", '"' * 16000)
+        sid = self.observe("next", "我现在喜欢乌龙茶")
+        await self.run_changes([])
+        self.assertEqual(self.adapter.calls, 1)
+        self.assertLessEqual(len(json.dumps(self.adapter.payload, ensure_ascii=False)), self.cfg["input_chars"])
+        self.now += self.cfg["round_gap_seconds"]
+        result = await self.run_changes([self.change(sid)])
+        self.assertEqual(result["results"], ["committed"])
+        self.assertFalse(self.dream.due())
+
     def test_china_day_boundary(self):
         from datetime import datetime, timezone
         before = datetime(2026,10,30,15,59,59,tzinfo=timezone.utc).timestamp()

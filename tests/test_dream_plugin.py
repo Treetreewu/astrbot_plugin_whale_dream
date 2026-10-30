@@ -16,8 +16,41 @@ from whale_dream.runtime import InstanceHooks
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class NativeEngine:
+class NativeLock:
+    """Task-reentrant native lock contract, including native-only callers."""
     def __init__(self):
+        self.lock = asyncio.Lock()
+        self.owner = None
+        self.depth = 0
+
+    async def acquire(self):
+        task = asyncio.current_task()
+        if self.owner is not task:
+            await self.lock.acquire()
+            self.owner = task
+        self.depth += 1
+
+    def release(self):
+        assert self.owner is asyncio.current_task()
+        self.depth -= 1
+        if not self.depth:
+            self.owner = None
+            self.lock.release()
+
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, *args):
+        self.release()
+
+
+class NativeEngine:
+    __module__ = "test_livingmemory.core.managers.memory_engine"
+
+    def __init__(self):
+        self.db_path = "synthetic-memory.db"
+        self.native_lock = NativeLock()
         self.rows = []
         self.db_connection = NS(execute=self.query)
 
@@ -84,6 +117,8 @@ class BindingTests(unittest.IsolatedAsyncioTestCase):
         self.binding = DreamBinding(self.context)
         self.addAsyncCleanup(self.binding.stop)
         api, star, utils = ModuleType("astrbot.api"), ModuleType("astrbot.api.star"), ModuleType("test_livingmemory.core.utils")
+        storage = ModuleType("test_livingmemory.storage.sqlite_utils")
+        storage.get_sqlite_lock = lambda path: self.host.initializer.memory_engine.native_lock
         self.settings = {}
         async def get_async(**kwargs):
             return self.settings.get(kwargs["key"], {})
@@ -93,7 +128,8 @@ class BindingTests(unittest.IsolatedAsyncioTestCase):
         utils.get_persona_id = AsyncMock(return_value="unchanged-persona-id")
         self.utils = utils
         self.enterContext(patch.dict(sys.modules, {"astrbot.api": api, "astrbot.api.star": star,
-                                                   "test_livingmemory.core.utils": utils}))
+                                                   "test_livingmemory.core.utils": utils,
+                                                   "test_livingmemory.storage.sqlite_utils": storage}))
         self.enterContext(patch.dict(os.environ, WHALE_DREAM_CONFIG=str(ROOT/"whale_dream/default_config.json")))
         self.event = NS(unified_msg_origin="qq:group:unchanged-session-id", message_str="我喜欢乌龙茶",
                         message_obj=NS(message_id="m1", sender=NS(is_bot=False)), plugins_name=None,
@@ -104,6 +140,50 @@ class BindingTests(unittest.IsolatedAsyncioTestCase):
         await self.binding.start()
         self.assertIs(self.binding.host, self.host)
         return self.host._whale_dream
+
+    async def test_native_cleanup_and_dream_write_share_one_reentrant_lock(self):
+        engine = self.host.initializer.memory_engine
+        scanned, resume = asyncio.Event(), asyncio.Event()
+        async def add_memory(**kwargs):
+            async with engine.native_lock:
+                return 42
+        async def delete(memory_ids):
+            async with engine.native_lock:
+                return len(memory_ids)
+        engine.add_memory = add_memory
+        engine.batch_delete_memories = delete
+        dream = await self.bind()
+        async def cleanup():
+            # Pinned cleanup_old_memories holds this lock before calling the
+            # wrapped batch deletion. It must be able to re-enter the gate.
+            async with engine.native_lock:
+                scanned.set()
+                await resume.wait()
+                return await engine.batch_delete_memories([1])
+        cleaning = asyncio.create_task(cleanup())
+        await scanned.wait()
+        writing = asyncio.create_task(engine.add_memory(content="synthetic"))
+        await asyncio.sleep(0)
+        resume.set()
+        try:
+            self.assertEqual(await asyncio.wait_for(asyncio.gather(cleaning, writing), 1), [1, 42])
+            self.assertIs(dream.adapter.gate.lock, engine.native_lock)
+        finally:
+            for task in (cleaning, writing):
+                task.cancel()
+            await asyncio.gather(cleaning, writing, return_exceptions=True)
+
+    async def test_transport_identity_missing_does_not_become_human_evidence(self):
+        dream = await self.bind()
+        self.event.message_obj.sender = NS(user_id="u1", nickname="human-looking name")
+        await astrbot.observe(self.host, self.event)
+        self.assertFalse(next(iter(dream.store.read()["sources"].values()))["human"])
+        for i, flag in enumerate((True, False)):
+            self.event.message_obj.message_id = f"flag-{i}"
+            self.event.message_obj.raw_message = NS(raw_data={"author": {"bot": flag}})
+            await astrbot.observe(self.host, self.event)
+        sources = sorted(dream.store.read()["sources"].values(), key=lambda m: m["seq"])
+        self.assertEqual([m["human"] for m in sources], [False, False, True])
 
     async def test_delayed_start_reload_and_journal_identity(self):
         self.host.initializer.is_initialized = False
@@ -143,7 +223,7 @@ class BindingTests(unittest.IsolatedAsyncioTestCase):
         engine.archive_memories = None
         with self.assertLogs("whale_dream", level="ERROR"):
             self.assertIsNone(await self.binding.reconcile())
-        self.assertEqual(set(vars(engine)), {"archive_memories", "db_connection", "rows"})
+        self.assertEqual(set(vars(engine)), {"archive_memories", "db_connection", "rows", "db_path", "native_lock"})
         self.assertEqual(vars(self.host.consolidation_manager), {})
         self.assertIsNone(self.host._whale_dream)
         self.assertIsNone(astrbot._runtime)
@@ -157,7 +237,7 @@ class BindingTests(unittest.IsolatedAsyncioTestCase):
         await engine.delete_memory(123)
         self.assertEqual(dream.store.read()["epoch"], 1)
         await self.binding.stop()
-        self.assertEqual(set(vars(engine)), {"db_connection", "rows"})
+        self.assertEqual(set(vars(engine)), {"db_connection", "rows", "db_path", "native_lock"})
         self.assertEqual(vars(self.host.consolidation_manager), {})
         self.assertEqual(vars(self.host.initializer.conversation_manager), {})
         self.assertNotIn("terminate", vars(self.host))

@@ -49,6 +49,18 @@ def validate_config(cfg):
     for name in names:
         if type(cfg.get(name)) is not int or cfg[name] <= 0:
             raise ValueError("invalid positive integer: " + name)
+    roles = cfg.get("sender_roles", {})
+    if not isinstance(roles, dict) or set(roles) - {"maibot", "astrbot"}:
+        raise ValueError("invalid sender role bots")
+    for sessions in roles.values():
+        if not isinstance(sessions, dict):
+            raise ValueError("invalid sender role sessions")
+        for session, senders in sessions.items():
+            if not isinstance(session, str) or not session.strip() or not isinstance(senders, dict):
+                raise ValueError("invalid sender role session")
+            if any(not isinstance(sender, str) or not sender.strip() or role not in ("human", "bot")
+                   for sender, role in senders.items()):
+                raise ValueError("invalid sender role")
     return cfg
 
 

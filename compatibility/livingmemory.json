@@ -9,6 +9,7 @@
     "core/managers/memory_engine.py": "5cf8c67d3b6eb98d6f58353e872d07907220e25324aa808c397a09ae6dd60966",
     "core/managers/conversation_manager.py": "72e956bf1aa3ac22aee3169cb5f2c0a5255d4ffd5897941bc803041a80b0ab80",
     "core/utils/__init__.py": "db74e6ceb0bf6b7315dad71aac45fcc3d4a8dfe7074fcd073c06a2f55da77931",
-    "metadata.yaml": "5f2936c619e744be49f3e69e9e63f458f51391d25fed76a9085c01e0a1e3fd78"
+    "metadata.yaml": "5f2936c619e744be49f3e69e9e63f458f51391d25fed76a9085c01e0a1e3fd78",
+    "storage/sqlite_utils.py": "52ad7a3bb4abb6ce1cf75f3895c949f60f65b098da43429544fe63f879f6f506"
   }
 }

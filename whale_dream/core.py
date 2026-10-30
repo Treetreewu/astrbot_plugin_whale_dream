@@ -92,11 +92,40 @@ class Dream:
         messages = sorted((m for m in s["sources"].values() if m["scope"] == scope and m["seq"] > p["cursor"]
             and m.get("text") and m["id"] not in s["invalid_sources"]
             and m["time"] >= max(p["cutoff"], now-self.cfg["history_days"]*86400)), key=lambda m:m["seq"])
+        budget = self.cfg["input_chars"] // 2
+        # Keep nearby bot context only if the first pending human can fit too.
+        # Otherwise a bot-only prefix would be retried forever without a cursor.
+        first_human = next((i for i, m in enumerate(messages) if m["human"]), None)
+        if first_human is not None:
+            start = first_human
+            size = len(json.dumps(messages[first_human], ensure_ascii=False))
+            while start > 0 and first_human - start + 1 < self.cfg["messages_per_session"]:
+                previous_size = len(json.dumps(messages[start-1], ensure_ascii=False))
+                if size + previous_size > budget:
+                    break
+                size += previous_size
+                start -= 1
+            messages = messages[start:]
         selected, chars = [], 0
         for m in messages[:self.cfg["messages_per_session"]]:
             size = len(json.dumps(m, ensure_ascii=False))
-            if chars+size > self.cfg["input_chars"]//2:
-                break
+            if chars+size > budget:
+                if selected:
+                    break
+                # JSON escaping can make a 16k source exceed the 20k budget.
+                # Keep a real prefix for quote validation without editing storage.
+                low, high = 0, len(m["text"])
+                while low < high:
+                    mid = (low + high + 1) // 2
+                    candidate = {**m, "text": m["text"][:mid]}
+                    if len(json.dumps(candidate, ensure_ascii=False)) <= budget:
+                        low = mid
+                    else:
+                        high = mid - 1
+                if not low:
+                    raise ValueError("input budget too small for message metadata")
+                m = {**m, "text": m["text"][:low]}
+                size = len(json.dumps(m, ensure_ascii=False))
             selected.append(m)
             chars += size
         records = [r for r in s["records"].values() if r["scope"] == scope and r["status"] in {"active", "candidate"}]

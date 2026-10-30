@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import time
 
 from .policy import digest, tokens
 from .runtime import NativeGate, create, safe_observe, ensure_export_current, LOG
+from .identity import is_human_sender
 
 _runtime = None
 
@@ -20,7 +22,9 @@ class AstrAdapter:
     def __init__(self, plugin, session_check=None):
         self.plugin = plugin
         self.engine = plugin.initializer.memory_engine
-        self.gate = NativeGate()
+        package = type(self.engine).__module__.rsplit(".core.", 1)[0]
+        storage = importlib.import_module(package + ".storage.sqlite_utils")
+        self.gate = NativeGate(storage.get_sqlite_lock(self.engine.db_path))
         self.manual_tasks = set()
         self.checkpoint_ready = False
         self.session_check = session_check or session_enabled
@@ -227,10 +231,17 @@ async def observe(plugin, event, role="user", content=None):
     obj = event.message_obj
     message_id = str(getattr(obj, "message_id", "") or digest(event.unified_msg_origin, sender, text, getattr(obj, "timestamp", "")))
     quoted = not own_text and any(type(c).__name__ in {"Reply", "Forward", "Node", "Nodes"} for c in components)
-    known_bot = bool(getattr(getattr(obj, "sender", None), "is_bot", False))
+    raw = getattr(obj, "raw_message", None)
+    raw = raw if isinstance(raw, dict) else getattr(raw, "raw_data", None)
+    author = raw.get("author", {}) if isinstance(raw, dict) else {}
+    flags = [getattr(getattr(obj, "sender", None), "is_bot", None)]
+    if isinstance(author, dict):
+        flags.extend(author.get(key) for key in ("bot", "is_bot"))
+    human = role == "user" and is_human_sender(dream.cfg, "astrbot", event.unified_msg_origin,
+        str(sender), self_id=str(event.get_self_id()), flags=flags)
     safe_observe(dream.observe, session=event.unified_msg_origin, persona=persona,
         group=bool(event.get_group_id()), source_id=message_id+":"+role,
-        sender=str(sender), text=str(text or ""), human=role == "user" and str(sender) != str(event.get_self_id()) and not known_bot,
+        sender=str(sender), text=str(text or ""), human=human,
         timestamp=time.time(), quoted=quoted)
 
 

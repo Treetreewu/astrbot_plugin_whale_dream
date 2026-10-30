@@ -48,8 +48,10 @@ def config():
 
 
 class NativeGate:
-    def __init__(self):
-        self.lock = asyncio.Lock()
+    def __init__(self, lock=None):
+        # LivingMemory supplies its task-reentrant SQLite lock. Using the same
+        # lock also covers native callers that enter through cleanup/maintenance.
+        self.lock = lock if lock is not None else asyncio.Lock()
         self.hooks = InstanceHooks()
         self.active = True
         self.owner = ContextVar("dream_native_owner", default=None)
@@ -107,6 +109,13 @@ class NativeGate:
 
 def create(bot, folder, adapter):
     cfg = config()
+    # Optional private mapping for transports that do not identify bot authors.
+    # This lives beside the journal, never in the public deployment config.
+    identities = Path(folder)/"whale-dream"/"sender-roles.json"
+    if identities.exists():
+        cfg = {**cfg, "sender_roles": {**cfg.get("sender_roles", {}),
+            bot: json.loads(identities.read_text(encoding="utf-8-sig"))}}
+        validate_config(cfg)
     store = Store(Path(folder)/"whale-dream"/"state.sqlite3", bot, time.time())
     dream = Dream(store, cfg, adapter)
     adapter.dream = dream

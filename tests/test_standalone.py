@@ -80,7 +80,9 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         plugin = SimpleNamespace(initializer=SimpleNamespace(memory_engine=None),
                                  config_manager=SimpleNamespace(get=lambda key, default: default))
         with self.assertRaisesRegex(RuntimeError, "llm_provider_id"):
-            await AstrAdapter(plugin).generate("system", "prompt")
+            adapter = object.__new__(AstrAdapter)
+            adapter.plugin = plugin
+            await adapter.generate("system", "prompt")
 
 
 if __name__ == "__main__":

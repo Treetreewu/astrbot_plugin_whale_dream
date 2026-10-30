@@ -40,7 +40,7 @@ def prepare(source_root):
             compile(target.read_text(encoding="utf-8"), str(target), "exec")
             manifest["files"][str(target.relative_to(ROOT)).replace("\\", "/")] = sha(target)
         if name == "livingmemory":
-            for relative in ["main.py", "core/managers/consolidation_manager.py", "core/managers/memory_engine.py", "core/managers/conversation_manager.py", "core/utils/__init__.py"]:
+            for relative in ["main.py", "core/managers/consolidation_manager.py", "core/managers/memory_engine.py", "core/managers/conversation_manager.py", "core/utils/__init__.py", "storage/sqlite_utils.py"]:
                 original = subprocess.check_output(["git", "-C", str(source_root/repo), "show", commit+":"+relative])
                 manifest["native_plugin"][relative] = hashlib.sha256(original.replace(b'\r\n', b'\n')).hexdigest()
     target = ROOT/".local/dream-build/manifest.json"

@@ -6,6 +6,7 @@ import time
 
 from .policy import digest, tokens
 from .runtime import NativeGate, create, safe_observe, ensure_export_current, LOG
+from .identity import is_human_sender
 
 _runtime = None
 PERSONA = "maibot-native-v1"
@@ -117,7 +118,10 @@ def observe(message):
     own_text = " ".join(str(getattr(c, "text", "")) for c in components if type(c).__name__ == "TextComponent")
     quoted = not own_text and (bool(getattr(message, "reply_to", None)) or any("Forward" in type(c).__name__ or "Reply" in type(c).__name__ for c in components))
     received = getattr(message, "received_at", None)
-    human = received is not None and not bool(getattr(user, "is_bot", False))
+    human = received is not None and is_human_sender(_runtime.cfg, "maibot", str(message.session_id),
+        str(user.user_id), self_id=str(getattr(message, "account_id", "") or ""),
+        flags=(getattr(user, "is_bot", None),
+               (getattr(info, "additional_config", None) or {}).get("qq_official_sender_is_bot")))
     safe_observe(_runtime.observe, session=str(message.session_id), persona=PERSONA,
         group=info.group_info is not None, source_id=source, sender=str(user.user_id),
         text=own_text or str(message.processed_plain_text or ""), human=human, timestamp=time.time(), quoted=quoted)
