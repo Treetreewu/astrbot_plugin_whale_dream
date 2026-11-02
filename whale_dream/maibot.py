@@ -101,7 +101,15 @@ def install_native_hooks(adapter, dream):
             # may refresh derived person profiles but never edit their sources.
             # Keep correct_evidence, manual overrides and unknown actions guarded.
             preserves = {"observe_identity", "resolve_identity", "query", "evidence", "get_aliases", "process_pending"} if name == "memory_profile_admin" else ()
-            adapter.gate.wrap(kernel, name, dream, invalidates=True, preserves_sources=preserves)
+            # These two pinned SDK forwarders use instance lookup. The service
+            # redirects kernel instance overrides back to us, causing recursion.
+            # Bind its class implementation as the delegate, like the other SDK
+            # admin forwarders already do; retain our gate and invalidation hook.
+            service_name = {"memory_delete_admin": "_delete_admin_service",
+                            "memory_correction_admin": "_correction_admin_service"}.get(name)
+            service = getattr(kernel, service_name, None) if service_name else None
+            delegate = getattr(type(service), name).__get__(service) if service is not None else None
+            adapter.gate.wrap(kernel, name, dream, invalidates=True, preserves_sources=preserves, delegate=delegate)
 
 
 def install(kernel):

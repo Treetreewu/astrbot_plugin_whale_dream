@@ -496,6 +496,55 @@ class DreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([m["id"] for m in snap["messages"]], [digest(digest("A", "P"), "new")])
         self.assertEqual(snap["profile"]["cutoff"], cutoff)
 
+    async def test_maibot_sdk_service_override_does_not_recurse(self):
+        calls = []
+        class Service:
+            def __init__(self, kernel):
+                self._kernel = kernel
+
+            def __getattribute__(self, name):
+                # Pinned KernelServiceBase prioritizes kernel instance hooks.
+                if name != "_kernel":
+                    kernel = object.__getattribute__(self, "_kernel")
+                    if name in vars(kernel):
+                        return vars(kernel)[name]
+                return object.__getattribute__(self, name)
+
+            async def memory_delete_admin(self, **kwargs):
+                calls.append("delete")
+                return {"success": True}
+
+            async def memory_correction_admin(self, **kwargs):
+                calls.append("correct")
+                return {"success": True}
+
+        class Kernel:
+            async def ingest_summary(self, **kwargs): pass
+            async def ingest_text(self, **kwargs): pass
+            async def memory_delete_admin(self, **kwargs):
+                return await self._delete_admin_service.memory_delete_admin(**kwargs)
+            async def memory_correction_admin(self, **kwargs):
+                return await self._correction_admin_service.memory_correction_admin(**kwargs)
+
+        kernel = Kernel()
+        kernel._delete_admin_service = Service(kernel)
+        kernel._correction_admin_service = Service(kernel)
+        adapter = MaiAdapter(kernel)
+        install_native_hooks(adapter, self.dream)
+        self.observe()
+        epoch = self.store.read()["epoch"]
+        await kernel.memory_delete_admin(action="execute")
+        await kernel.memory_correction_admin(action="execute")
+        self.assertEqual(calls, ["delete", "correct"])
+        self.assertEqual(self.store.read()["epoch"], epoch+2)
+        # Dream's own archive is gated but must not invalidate its new summary.
+        async with adapter.gate.enter(internal=True):
+            await kernel.memory_delete_admin(action="execute")
+        self.assertEqual(self.store.read()["epoch"], epoch+2)
+        adapter.gate.hooks.restore()
+        await kernel.memory_delete_admin(action="execute")
+        self.assertEqual(calls, ["delete", "correct", "delete", "delete"])
+
     async def test_native_episode_merge_is_staged_after_new_write(self):
         sid = self.observe(text="还记得我们一起看鲸鱼吗")
         native = [dict(id="old-1", text="两位群友一起讨论了鲸鱼", fingerprint="v1", kind="episode", subject="")]

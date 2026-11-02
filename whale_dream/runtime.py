@@ -73,8 +73,8 @@ class NativeGate:
             if not nested:
                 self.lock.release()
 
-    def wrap(self, obj, name, dream, invalidates=False, preserves_sources=()):
-        original = getattr(obj, name, None)
+    def wrap(self, obj, name, dream, invalidates=False, preserves_sources=(), delegate=None):
+        original = delegate if delegate is not None else getattr(obj, name, None)
         if not callable(original):
             raise RuntimeError("pinned native method missing: " + name)
 
