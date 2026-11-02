@@ -90,6 +90,20 @@ class MaiAdapter:
                     raise RuntimeError("native dream archive failed")
 
 
+def install_native_hooks(adapter, dream):
+    """Pinned profile lookups/identity bookkeeping do not edit source memories."""
+    kernel = adapter.kernel
+    for name in ("ingest_summary", "ingest_text"):
+        adapter.gate.wrap(kernel, name, dream)
+    for name in ("memory_delete_admin", "memory_source_admin", "memory_correction_admin", "memory_fact_admin", "memory_profile_admin", "memory_v5_admin"):
+        if hasattr(kernel, name):
+            # observe_identity runs for every admitted message. query/evidence
+            # may refresh derived person profiles but never edit their sources.
+            # Keep correct_evidence, manual overrides and unknown actions guarded.
+            preserves = {"observe_identity", "resolve_identity", "query", "evidence", "get_aliases", "process_pending"} if name == "memory_profile_admin" else ()
+            adapter.gate.wrap(kernel, name, dream, invalidates=True, preserves_sources=preserves)
+
+
 def install(kernel):
     global _runtime
     if _runtime is not None:
@@ -97,11 +111,7 @@ def install(kernel):
     adapter = MaiAdapter(kernel)
     dream = create("maibot", "/MaiMBot/data", adapter)
     _runtime = dream
-    for name in ("ingest_summary", "ingest_text"):
-        adapter.gate.wrap(kernel, name, dream)
-    for name in ("memory_delete_admin", "memory_source_admin", "memory_correction_admin", "memory_fact_admin", "memory_profile_admin", "memory_v5_admin"):
-        if hasattr(kernel, name):
-            adapter.gate.wrap(kernel, name, dream, invalidates=True)
+    install_native_hooks(adapter, dream)
     dream.start()
 
 

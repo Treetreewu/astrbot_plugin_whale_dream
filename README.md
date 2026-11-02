@@ -89,6 +89,8 @@ python scripts/prepare-compatibility.py --source-root /path/to/upstream
 
 共享包包含 `whale_dream.maibot`，并保留 `compatibility/patches/dream-maibot.patch` 供固定版本集成。MaiBot 的公开 SDK 当前缺少等价的幂等记忆写入、独立投影 ID、归档和删除通知接口，因此它**不是可直接安装的 MaiBot SDK 插件**。需要宿主补丁及让宿主可导入本仓库中的 `whale_dream` 包；不要把 AstrBot 的 `main.py` 放入 MaiBot 插件目录。
 
+MaiBot 的身份登记、身份解析、画像查询/证据查询、别名读取和画像刷新队列只更新身份索引或派生画像，不推进做梦的历史截止点。例外按 `memory_profile_admin` 方法限定；真正的证据更正、删除、手动覆盖及未知管理动作仍保留失效校验。升级不会自动回退旧截止点或重放被其挡住的聊天，避免重新引入确实已遗忘的内容；升级后的新消息可正常进入空闲整理。
+
 ## 许可与来源
 
 AGPL-3.0-or-later，见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。兼容补丁的上游上下文保留其原许可；MaiBot 的 GPL-3.0 文本在 [LICENSES/GPL-3.0.txt](LICENSES/GPL-3.0.txt)。发布修改后的上游构建产物时，应保留完整对应源码、补丁及许可证。

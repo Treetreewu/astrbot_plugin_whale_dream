@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 import tempfile
 from threading import Event
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from whale_dream.core import Dream
+from whale_dream.maibot import MaiAdapter, install_native_hooks
 from whale_dream.policy import day, digest, parse_changes, validate_config
 from whale_dream.runtime import NativeGate
 from whale_dream.store import Store
@@ -413,6 +415,86 @@ class DreamTests(unittest.IsolatedAsyncioTestCase):
         before = self.store.read()["epoch"]
         await engine.delete_memory(123)
         self.assertEqual(self.store.read()["epoch"], before)
+
+    def native_kernel(self, success=True):
+        async def operation(**kwargs):
+            return {"success": success}
+        kernel = SimpleNamespace(**{name: operation for name in (
+            "ingest_summary", "ingest_text", "memory_profile_admin", "memory_delete_admin",
+            "memory_source_admin", "memory_fact_admin", "memory_correction_admin", "memory_v5_admin")})
+        install_native_hooks(MaiAdapter(kernel), self.dream)
+        return kernel
+
+    async def test_maibot_identity_and_profile_reads_preserve_idle_dream(self):
+        kernel = self.native_kernel()
+        sid = self.observe()
+        self.observe("private", session="B", group=False)
+        before = self.store.read()
+        self.now += 1  # Match the native identity write occurring after capture.
+        for action in ("observe_identity", "resolve_identity", "query", "evidence", "get_aliases", "process_pending", " QUERY "):
+            await kernel.memory_profile_admin(action=action)
+        after = self.store.read()
+        self.assertEqual(after["epoch"], before["epoch"])
+        self.assertEqual(after["scopes"], before["scopes"])
+        self.now += 1201
+        self.assertEqual(set(self.dream.due()), {digest("A", "P"), digest("B", "P")})
+        # Restrict this replay to the cited A scope; the private message remains queued.
+        self.cfg["sessions_per_round"] = 1
+        self.adapter.reply = {"changes": [self.change(sid)]}
+        self.assertEqual((await self.dream.run_once())["results"], ["committed"])
+        self.assertIn("乌龙茶", self.dream.recall("A", "P", "乌龙茶"))
+
+    async def test_profile_lookup_during_generation_does_not_abort_valid_result(self):
+        kernel = self.native_kernel()
+        sid = self.observe()
+        original = self.adapter.generate
+        async def generate(system, prompt):
+            await kernel.memory_profile_admin(action="query", force_refresh=True)
+            return await original(system, prompt)
+        self.adapter.generate = generate
+        self.assertEqual((await self.run_changes([self.change(sid)]))["results"], ["committed"])
+        self.assertTrue(self.adapter.writes)
+
+    async def test_maibot_real_corrections_and_unknown_actions_still_invalidate(self):
+        kernel = self.native_kernel()
+        for name, action in (("memory_profile_admin", "correct_evidence"),
+                             ("memory_profile_admin", "set_override"),
+                             ("memory_profile_admin", "unknown_action"),
+                             ("memory_delete_admin", "execute"),
+                             ("memory_source_admin", "delete"),
+                             ("memory_fact_admin", "retract"),
+                             ("memory_correction_admin", "execute"),
+                             ("memory_v5_admin", "query")):
+            with self.subTest(name=name, action=action):
+                self.now += 1
+                self.observe(name+action)
+                self.now += 1201
+                self.assertTrue(self.dream.due())
+                await getattr(kernel, name)(action=action)
+                self.assertFalse(self.dream.due())
+
+    async def test_denied_maibot_profile_correction_does_not_clear_pending_input(self):
+        kernel = self.native_kernel(success=False)
+        self.observe()
+        self.now += 1201
+        before = self.store.read()
+        await kernel.memory_profile_admin(action="correct_evidence")
+        self.assertEqual(self.store.read(), before)
+        self.assertTrue(self.dream.due())
+
+    async def test_maibot_fix_does_not_rewind_existing_forgetting_barrier(self):
+        self.observe("old")
+        self.now += 1
+        self.dream.invalidate_native()
+        cutoff = self.store.read()["scopes"][digest("A", "P")]["cutoff"]
+        kernel = self.native_kernel()
+        self.now += 1
+        self.observe("new")
+        await kernel.memory_profile_admin(action="observe_identity")
+        self.now += 1201
+        snap = self.dream.snapshot(digest("A", "P"))
+        self.assertEqual([m["id"] for m in snap["messages"]], [digest(digest("A", "P"), "new")])
+        self.assertEqual(snap["profile"]["cutoff"], cutoff)
 
     async def test_native_episode_merge_is_staged_after_new_write(self):
         sid = self.observe(text="还记得我们一起看鲸鱼吗")

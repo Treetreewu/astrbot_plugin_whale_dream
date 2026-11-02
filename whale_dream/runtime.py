@@ -73,7 +73,7 @@ class NativeGate:
             if not nested:
                 self.lock.release()
 
-    def wrap(self, obj, name, dream, invalidates=False):
+    def wrap(self, obj, name, dream, invalidates=False, preserves_sources=()):
         original = getattr(obj, name, None)
         if not callable(original):
             raise RuntimeError("pinned native method missing: " + name)
@@ -84,11 +84,11 @@ class NativeGate:
                 invalidate = False
                 ids = None
                 if self.active and invalidates and not self.internal.get():
-                    # Fail closed on general native mutations; the host still
-                    # decides authorization. Read-only admin actions do not enter.
-                    action = kwargs.get("action", "")
+                    # Keep method-specific non-destructive maintenance separate
+                    # from source corrections. Unknown actions remain conservative.
+                    action = str(kwargs.get("action", "") or "").strip().lower()
                     readonly = {"preview", "plan", "get", "list", "status", "get_operation", "list_operations", "recycle_bin", "stats"}
-                    if action not in readonly:
+                    if action not in readonly and action not in preserves_sources:
                         invalidate = True
                         ids = kwargs.get("memory_ids")
                         single = kwargs.get("memory_id")
