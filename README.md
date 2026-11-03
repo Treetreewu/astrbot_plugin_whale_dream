@@ -53,6 +53,8 @@
 
 默认配置是 [`whale_dream/default_config.json`](whale_dream/default_config.json)。可用环境变量 `WHALE_DREAM_CONFIG` 指向私有 JSON 文件；显式指定的文件不存在或格式错误时会报错，不会静默回退。共享配置中的 `bots.maibot` 仅用于可选 MaiBot 接入，加载 AstrBot 插件不会启动 MaiBot。
 
+MaiBot 做梦请求独立使用 `output_tokens`（默认 16384，可设 4096—32768），为推理和完整 JSON 留出空间，不修改宿主日常聊天或普通记忆任务的配置；AstrBot 仍沿用其原生 Provider 设置。MaiBot 达到预算时明确记为 `TruncatedOutputError`，不保存部分结果、不推进游标；仍计入原有每日轮次，下一次按既有调度重试。提示词要求少量变化、短引文，消息证据使用消息 `id`，不能误填 `sender`。增加预算不能保证每次模型输出都满足证据校验；原有校验不放宽。
+
 AstrBot journal 仍使用 `StarTools.get_data_dir("astrbot_plugin_livingmemory")/whale-dream/state.sqlite3`，因此从原接入迁移时可保留证据、额度、投影 ID 和成长版本。这个兼容路径是有意保留的，卸载做梦插件不会删除数据。原生模型和 embedding 调用可能产生费用。
 
 正常卸载保存仅含 ID 和哈希的原生记录检查点。重新加载时，停用期间的编辑/删除会失效相关证据；若上次异常退出，无法证明修改没有遗漏，会保守地使旧证据失效并建立历史截止点。原数据与版本保留用于私密管理。

@@ -11,6 +11,7 @@
   "memories_per_session": 150,
   "input_chars": 40000,
   "timeout_seconds": 120,
+  "output_tokens": 16384,
   "episodes_per_session": 3,
   "traits_per_session": 2,
   "promotion_interactions": 3,

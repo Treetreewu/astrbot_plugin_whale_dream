@@ -27,12 +27,19 @@ class MaiAdapter:
 
     async def generate(self, system, prompt):
         from src.services.llm_service import LLMServiceClient
+        from src.common.data_models.llm_service_data_models import LLMGenerationOptions
         client = LLMServiceClient(task_name="memory", request_type="whale_dream")
         attempt = client._orchestrator._attempt_request_on_model
         async def once(api_provider, provider_client, request, retry_limit=None):
             return await attempt(api_provider, provider_client, request, retry_limit=1)
         client._orchestrator._attempt_request_on_model = once
-        response = await client.generate_response(prompt=system+"\n\n"+prompt)
+        # Reasoning and JSON share the native output budget. The ordinary
+        # memory task's 4096-token default repeatedly truncated real proposals.
+        budget = self.dream.cfg.get("output_tokens", 16384)
+        response = await client.generate_response(prompt=system+"\n\n"+prompt,
+            options=LLMGenerationOptions(max_tokens=budget))
+        from .policy import reject_truncated_output
+        reject_truncated_output(response.provider_response, response.completion_tokens, budget)
         return response.response
 
     async def memories(self, profile, messages, limit):

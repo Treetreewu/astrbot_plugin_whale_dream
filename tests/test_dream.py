@@ -107,6 +107,23 @@ class DreamTests(unittest.IsolatedAsyncioTestCase):
         await self.dream.run_once()
         self.assertEqual(self.adapter.calls, 1)
 
+    async def test_output_exhaustion_keeps_cursor_and_native_records_untouched(self):
+        from unittest.mock import AsyncMock
+        from whale_dream.policy import TruncatedOutputError
+        self.observe()
+        before = self.store.read()
+        self.adapter.generate = AsyncMock(side_effect=TruncatedOutputError('budget exhausted'))
+        self.now += 1201
+        result = await self.dream.run_once()
+        after = self.store.read()
+        self.assertEqual(result['results'], ['failed'])
+        self.assertEqual(after['records'], before['records'])
+        self.assertEqual(after['jobs'], before['jobs'])
+        self.assertEqual([p['cursor'] for p in after['scopes'].values()], [0])
+        self.assertEqual(len(after['rounds']), 1)
+        self.assertEqual(self.adapter.writes, {})
+        self.assertEqual(self.adapter.archived, set())
+
     async def test_fact_native_write_and_scope_isolation(self):
         sid = self.observe(group=False)
         await self.run_changes([self.change(sid)])
